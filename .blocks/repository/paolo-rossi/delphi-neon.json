@@ -1,0 +1,32 @@
+{
+  "application": {
+    "id": "paolo-rossi.delphi-neon",
+    "name": "Delphi-Neon",
+    "description": "JSON Serialization library for Delphi",
+    "url": "https://github.com/paolo-rossi/delphi-neon"
+  },
+  "supportedPlatforms": {
+    "Win32": {
+      "sourcePath": [
+        "Source"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "name": "Neon",
+      "type": [
+        "runtime"
+      ]
+    }
+  ],
+  "package options": {
+    "package folders": {
+      "delphiberlin": "10.1Berlin",
+      "delphitokyo": "10.2Tokyo",
+      "delphirio": "10.3Rio",
+      "delphisydney": "10.4Sydney",
+      "delphi11+": "11AndLater"
+    }
+  }
+}

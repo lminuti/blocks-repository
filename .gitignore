@@ -1,0 +1,8 @@
+ws/
+.claude/
+*.local
+./blocks/*-database.json
+delphi-jose-jwt/
+/Delphi-Neon
+/OpenAPI-Delphi
+/WiRL

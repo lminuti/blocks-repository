@@ -1,0 +1,46 @@
+{
+  "application": {
+    "id": "delphi-blocks.wirl",
+    "name": "WiRL",
+    "description": "RESTful Library for Delphi",
+    "url": "https://github.com/delphi-blocks/WiRL"
+  },
+  "supportedPlatforms": {
+    "Win32": {
+      "sourcePath": [
+        "Source\\Core",
+        "Source\\Data",
+        "Source\\Extensions",
+        "Source\\Client"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "name": "WiRL",
+      "type": [
+        "runtime"
+      ]
+    },
+    {
+      "name": "WiRLDesign",
+      "type": [
+        "designtime"
+      ]
+    }
+  ],
+  "package options": {
+    "package folders": {
+      "delphiberlin": "10.1Berlin",
+      "delphitokyo": "10.2Tokyo",
+      "delphirio": "10.3Rio",
+      "delphisydney": "10.4Sydney",
+      "delphi11+": "11AndLater"
+    }
+  },
+  "dependencies": [
+    "paolo-rossi.delphi-neon@a576d50073ef4c1036eef1d2e07d014e4d60483b",
+    "paolo-rossi.delphi-jose-jwt@26229885b001270c5aa35e5f9e2c02343c9b70fd",
+    "paolo-rossi.openapi-delphi@2f71a29c2c2feb7688288ec91533c5038b179e1a"
+  ]
+}

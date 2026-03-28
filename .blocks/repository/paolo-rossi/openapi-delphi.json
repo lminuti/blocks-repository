@@ -1,0 +1,31 @@
+{
+  "application": {
+    "id": "paolo-rossi.openapi-delphi",
+    "name": "OpenAPI-Delphi",
+    "description": "OpenAPI 3.0 document generator and parser for Delphi",
+    "url": "https://github.com/paolo-rossi/OpenAPI-Delphi"
+  },
+  "supportedPlatforms": {
+    "Win32": {
+      "sourcePath": [
+        "Source"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "name": "OpenAPI",
+      "type": [
+        "runtime"
+      ]
+    }
+  ],
+  "package options": {
+    "package folders": {
+      "delphitokyo": "10.2Tokyo",
+      "delphirio": "10.3Rio",
+      "delphisydney": "10.4Sydney",
+      "delphi11+": "11AndLater"
+    }
+  }
+}

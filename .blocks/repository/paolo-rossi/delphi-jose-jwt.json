@@ -1,0 +1,35 @@
+{
+  "application": {
+    "id": "paolo-rossi.delphi-jose-jwt",
+    "name": "delphi-jose-jwt",
+    "description": "Delphi implementation of JOSE and JWT",
+    "url": "https://github.com/paolo-rossi/delphi-jose-jwt"
+  },
+  "supportedPlatforms": {
+    "Win32": {
+      "sourcePath": [
+        "Source\\Common",
+        "Source\\JOSE"
+      ],
+      "browsingPath": [],
+      "debugDCUPath": []
+    }
+  },
+  "packages": [
+    {
+      "name": "JOSE",
+      "type": [
+        "runtime"
+      ]
+    }
+  ],
+  "package options": {
+    "package folders": {
+      "delphiberlin": "10.1Berlin",
+      "delphitokyo": "10.2Tokyo",
+      "delphirio": "10.3Rio",
+      "delphisydney": "10.4Sydney",
+      "delphi11+": "11AndLater"
+    }
+  }
+}
