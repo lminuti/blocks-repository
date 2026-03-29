@@ -24,7 +24,7 @@ param(
 # ==============================================================================
 
 $BlocksRepositoryUrl = 'https://github.com/lminuti/blocks-repository'
-$ScriptName          = '.\' + [System.IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Name)
+$ScriptName          = 'blocks'
 
 # ==============================================================================
 # DELPHI VERSION REGISTRY MAP
