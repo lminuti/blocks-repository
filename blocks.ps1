@@ -4,6 +4,7 @@ param(
     [switch]$Silent,
     [switch]$Overwrite,
     [string]$Product       = '',
+    [Parameter(Position=0)]
     [string]$Install    = '',
     [string]$Commit        = '',
     [string]$ProjectFolder  = '',
@@ -11,10 +12,19 @@ param(
     [switch]$BuildOnly,
     [switch]$Uninstall,
     [switch]$ListProducts,
+    [switch]$List,
+    [switch]$Init,
     [switch]$Help
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# ==============================================================================
+# CONSTANTS
+# ==============================================================================
+
+$BlocksRepositoryUrl = 'https://github.com/lminuti/blocks-repository'
+$ScriptName          = '.\' + [System.IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Name)
 
 # ==============================================================================
 # DELPHI VERSION REGISTRY MAP
@@ -750,12 +760,85 @@ function Get-ConfigJson {
 }
 
 # ==============================================================================
+# INIT
+# ==============================================================================
+
+function Initialize-Workspace {
+    param([string]$WorkDir)
+
+    $blocksDir     = Join-Path $WorkDir '.blocks'
+    $repositoryDir = Join-Path $blocksDir 'repository'
+    $downloadDir   = Join-Path $blocksDir 'download'
+    $zipPath       = Join-Path $downloadDir 'repository.zip'
+
+    # Create .blocks directory if needed
+    if (-not (Test-Path $blocksDir)) {
+        New-Item -ItemType Directory -Path $blocksDir -Force | Out-Null
+        Write-Host "Created: $blocksDir" -ForegroundColor Green
+    }
+
+    # Prepare temp download directory
+    if (Test-Path $downloadDir) { Remove-Item $downloadDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
+
+    Write-Host "Fetching repository info..." -ForegroundColor Cyan
+    $repoInfo = Get-GitHubRepoInfo -RepoUrl $BlocksRepositoryUrl
+    Write-Host "  Branch : $($repoInfo.DefaultBranch)"
+    Write-Host "  Latest : $($repoInfo.LatestCommit)"
+    Write-Host ""
+
+    $zipUrl = Get-GitHubZipUrl -Owner $repoInfo.Owner -Repo $repoInfo.Repo -CommitSha $repoInfo.LatestCommit
+
+    Write-Host "Downloading repository..." -ForegroundColor Cyan
+    try {
+        $headers = @{ 'User-Agent' = 'BLOCKS/1.0' }
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -Headers $headers
+    }
+    catch {
+        throw "Download failed: $_"
+    }
+
+    Write-Host "Extracting..." -ForegroundColor Cyan
+    $extractDir = Join-Path $downloadDir 'extract'
+    Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+
+    # GitHub wraps content in a subdirectory (e.g. "lminuti-blocks-repository-abc1234")
+    $innerDir = Get-ChildItem $extractDir -Directory | Select-Object -First 1
+    if ($null -eq $innerDir) {
+        throw "Unexpected zip structure: no subdirectory found."
+    }
+
+    # Find .blocks\repository inside the extracted folder
+    $sourceRepo = Join-Path $innerDir.FullName '.blocks\repository'
+    if (-not (Test-Path $sourceRepo)) {
+        throw "Repository folder not found in downloaded archive: .blocks\repository"
+    }
+
+    # Overwrite local .blocks\repository
+    if (Test-Path $repositoryDir) {
+        Write-Host "Directory '$repositoryDir' already exists." -ForegroundColor Yellow
+        $confirm = Read-Host "Overwrite? [Y/N] (default: N)"
+        if ($confirm -notin @('Y', 'y')) {
+            Write-Host "Operation cancelled." -ForegroundColor Yellow
+            Remove-Item $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
+            return
+        }
+        Remove-Item $repositoryDir -Recurse -Force
+    }
+    Copy-Item -Path $sourceRepo -Destination $repositoryDir -Recurse -Force
+    Write-Host "Repository updated: $repositoryDir" -ForegroundColor Green
+
+    # Cleanup
+    Remove-Item $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# ==============================================================================
 # HELP
 # ==============================================================================
 
 function Show-Help {
     Write-Host ""
-    Write-Host "Usage: blocks.ps1 [options]" -ForegroundColor White
+    Write-Host "Usage: $script:ScriptName [options]" -ForegroundColor White
     Write-Host ""
     Write-Host "Options:" -ForegroundColor White
     Write-Host "  -Silent              Skip all non-critical prompts (uses defaults)."
@@ -771,16 +854,68 @@ function Show-Help {
     Write-Host "  -Uninstall           Remove the project directory and its database entry."
     Write-Host "  -BuildOnly           Skip download. Assumes project is already in place, runs build only."
     Write-Host "                       Without -ProjectFolder, falls back to the application name in config."
+    Write-Host "  -Init                Initialize the workspace: create .blocks\ and download the package repository."
+    Write-Host "                       Use with -WorkspacePath to target a different directory."
     Write-Host "  -ListProducts        Show installed Delphi versions and exit."
+    Write-Host "  -List                Show packages installed in the current workspace (all Delphi versions)."
+    Write-Host "                       Use with -Product to filter by Delphi version."
+    Write-Host "                       Use with -WorkspacePath to target a different workspace."
     Write-Host "  -Help                Show this help message."
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor White
-    Write-Host "  .\blocks.ps1"
-    Write-Host "  .\blocks.ps1 -Silent -Overwrite"
-    Write-Host "  .\blocks.ps1 -Product delphi12 -Overwrite"
-    Write-Host "  .\blocks.ps1 -BuildOnly -Silent -Product delphi13"
-    Write-Host "  .\blocks.ps1 -Install C:\repository\mylib.json"
-    Write-Host "  .\blocks.ps1 -Install https://example.com/repository/mylib.json"
+    Write-Host "  $script:ScriptName"
+    Write-Host "  $script:ScriptName -Silent -Overwrite"
+    Write-Host "  $script:ScriptName -Product delphi12 -Overwrite"
+    Write-Host "  $script:ScriptName -BuildOnly -Silent -Product delphi13"
+    Write-Host "  $script:ScriptName -Install C:\repository\mylib.json"
+    Write-Host "  $script:ScriptName -Install https://example.com/repository/mylib.json"
+    Write-Host ""
+}
+
+function Show-InstalledPackages {
+    param([array]$InstalledVersions, [string]$WorkDir)
+
+    # Determine which Delphi versions to list
+    if (-not [string]::IsNullOrWhiteSpace($script:Product)) {
+        $targets = $InstalledVersions | Where-Object {
+            $_.DisplayName -ieq $script:Product -or $_.VersionName -ieq $script:Product
+        }
+        if ($targets.Count -eq 0) {
+            throw "Product '$($script:Product)' not found among installed Delphi versions."
+        }
+    }
+    else {
+        $targets = $InstalledVersions
+    }
+
+    $found = $false
+    foreach ($v in $targets) {
+        $dbPath = Join-Path $WorkDir ".blocks\$($v.VersionName)-database.json"
+        if (-not (Test-Path $dbPath)) { continue }
+
+        $db = (Get-Content -Path $dbPath -Raw) | ConvertFrom-Json
+        if (-not $db.blocks -or $db.blocks.Count -eq 0) { continue }
+
+        $found = $true
+        Write-Host ""
+        Write-Host "  $($v.DisplayName)" -ForegroundColor Cyan
+        Write-Host ""
+        foreach ($entry in $db.blocks) {
+            if ($entry -match '^([^@]+)@(.+)$') {
+                $id     = $Matches[1]
+                $commit = $Matches[2]
+                Write-Host ("    {0,-35} {1}" -f $id, $commit.Substring(0, [Math]::Min(7, $commit.Length)))
+            }
+            else {
+                Write-Host "    $entry"
+            }
+        }
+    }
+
+    if (-not $found) {
+        Write-Host ""
+        Write-Host "  No packages installed." -ForegroundColor Yellow
+    }
     Write-Host ""
 }
 
@@ -804,7 +939,7 @@ function Show-InstalledVersions {
 # ==============================================================================
 
 try {
-    $noArgs = (-not $Help) -and (-not $ListProducts) -and [string]::IsNullOrWhiteSpace($Install)
+    $noArgs = (-not $Help) -and (-not $ListProducts) -and (-not $List) -and (-not $Init) -and (-not $Uninstall) -and [string]::IsNullOrWhiteSpace($Install)
     if ($noArgs) {
         Show-Banner -AppName '' -Description ''
         Show-Help
@@ -821,6 +956,57 @@ try {
         Show-Banner -AppName '' -Description ''
         Show-InstalledVersions
         exit 0
+    }
+
+    if ($List) {
+        Show-Banner -AppName '' -Description ''
+        $installedVersions = Get-InstalledDelphiVersions
+        $workDir = if (-not [string]::IsNullOrWhiteSpace($WorkspacePath)) { $WorkspacePath } else { (Get-Location).Path }
+        Write-Host "Installed packages in: $workDir" -ForegroundColor White
+        Show-InstalledPackages -InstalledVersions $installedVersions -WorkDir $workDir
+        exit 0
+    }
+
+    if ($Init) {
+        Show-Banner -AppName '' -Description ''
+        $workDir = if (-not [string]::IsNullOrWhiteSpace($WorkspacePath)) { $WorkspacePath } else { (Get-Location).Path }
+        Write-Host "Initializing workspace: $workDir" -ForegroundColor White
+        Write-Host ""
+        Initialize-Workspace -WorkDir $workDir
+        Write-Host ""
+        Write-Host "Workspace initialized." -ForegroundColor Green
+        Write-Host ""
+        exit 0
+    }
+
+    if ($Uninstall -and [string]::IsNullOrWhiteSpace($Install)) {
+        throw "-Uninstall requires a package ID, path, or URL. Usage: blocks -Uninstall <id>"
+    }
+
+    # Step 1 — Working directory
+    if (-not [string]::IsNullOrWhiteSpace($WorkspacePath)) {
+        if (-not (Test-Path $WorkspacePath -PathType Container)) {
+            New-Item -ItemType Directory -Path $WorkspacePath -Force | Out-Null
+        }
+        $workDir = $WorkspacePath
+    }
+    else {
+        $workDir = (Get-Location).Path
+    }
+
+    # Check if .blocks exists; offer to initialize if not
+    $blocksDir = Join-Path $workDir '.blocks'
+    if (-not (Test-Path $blocksDir)) {
+        Write-Host ""
+        Write-Host "The current directory is not a valid Blocks workspace." -ForegroundColor Yellow
+        Write-Host "Proceeding will initialize it by downloading the package repository." -ForegroundColor Yellow
+        Write-Host ""
+        $confirm = Read-Host "Initialize workspace now? [Y/N] (default: N)"
+        if ($confirm -notin @('Y', 'y')) {
+            throw "Operation cancelled. Run 'blocks -Init' to initialize the workspace first."
+        }
+        Initialize-Workspace -WorkDir $workDir
+        Write-Host ""
     }
 
     # Parse optional @commit suffix from -Install (e.g. "owner.pkg@abc1234")
@@ -842,16 +1028,6 @@ try {
 
     Test-DelphiRunning
 
-    # Step 1 — Working directory
-    if (-not [string]::IsNullOrWhiteSpace($WorkspacePath)) {
-        if (-not (Test-Path $WorkspacePath -PathType Container)) {
-            New-Item -ItemType Directory -Path $WorkspacePath -Force | Out-Null
-        }
-        $workDir = $WorkspacePath
-    }
-    else {
-        $workDir = (Get-Location).Path
-    }
     Write-Host "Workspace: $workDir" -ForegroundColor DarkGray
     Write-Host ""
 
